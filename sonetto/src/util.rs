@@ -30,10 +30,12 @@ pub unsafe fn read_csharp_string(s: usize) -> String {
     let str_length = *(s.wrapping_add(16) as *const u32);
     let str_ptr = s.wrapping_add(20) as *const u8;
 
-    String::from_utf16le_lossy(std::slice::from_raw_parts(
-        str_ptr,
-        (str_length * 2) as usize,
-    ))
+    let bytes = std::slice::from_raw_parts(str_ptr, (str_length * 2) as usize);
+    let units = bytes
+        .chunks_exact(2)
+        .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+        .collect::<Vec<_>>();
+    String::from_utf16_lossy(&units)
 }
 
 pub unsafe fn disable_memory_protection() {

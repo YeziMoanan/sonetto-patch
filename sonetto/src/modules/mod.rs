@@ -12,7 +12,6 @@ use windows::{
     },
 };
 
-
 mod network;
 mod socket;
 

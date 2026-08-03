@@ -1,5 +1,3 @@
-#![feature(str_from_utf16_endian)]
-
 use std::{sync::RwLock, time::Duration};
 
 use lazy_static::lazy_static;
@@ -8,6 +6,7 @@ use windows::core::PCSTR;
 use windows::Win32::System::SystemServices::DLL_PROCESS_ATTACH;
 use windows::Win32::{Foundation::HINSTANCE, System::LibraryLoader::GetModuleHandleA};
 
+mod config;
 mod interceptor;
 mod modules;
 mod util;
