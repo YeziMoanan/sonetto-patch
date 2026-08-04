@@ -27,6 +27,8 @@ impl MhyModule for MhyContext<Network> {
             on_set_request_header,
         )?;
 
+        crate::diagnostics::event("network hooks attached");
+
         Ok(())
     }
 
@@ -44,7 +46,12 @@ unsafe extern "win64" fn on_make_initial_url(reg: *mut Registers, _: usize) {
     let Ok(config) = crate::config::get() else {
         return;
     };
-    if let Some(new_url) = rewrite_url(&url, "http", &config.sdk.host, config.sdk.port) {
+    if let Some(new_url) = rewrite_sdk_url(&url, &config.sdk.host, config.sdk.port) {
+        crate::diagnostics::event(&format!(
+            "sdk rewrite {} -> {}",
+            redacted_url(&url),
+            redacted_url(&new_url)
+        ));
         println!("Redirect: {url} -> {new_url}");
         let cstr = CString::new(new_url.as_str()).unwrap();
         let new_ptr = il2cpp_string_new(cstr.as_ptr() as *const u8);
@@ -73,6 +80,11 @@ unsafe extern "win64" fn on_browser_load_url(reg: *mut Registers, _: usize) {
     let Some(new_url) = rewrite_url(&url, "https", &config.tls.host, config.tls.port) else {
         return;
     };
+    crate::diagnostics::event(&format!(
+        "browser rewrite {} -> {}",
+        redacted_url(&url),
+        redacted_url(&new_url)
+    ));
     println!("Browser::LoadURL: {url} -> {new_url}");
     let cstr = CString::new(new_url).unwrap();
     let new_ptr = il2cpp_string_new(cstr.as_ptr() as *const u8);
@@ -119,9 +131,50 @@ fn rewrite_url(url: &str, scheme: &str, host: &str, port: u16) -> Option<String>
     Some(format!("{scheme}://{host}:{port}{path}"))
 }
 
+fn rewrite_sdk_url(url: &str, host: &str, port: u16) -> Option<String> {
+    rewrite_url(url, "https", host, port)
+}
+
+fn redacted_url(url: &str) -> String {
+    let without_suffix = url.split(['?', '#']).next().unwrap_or(url);
+    let Some((scheme, rest)) = without_suffix.split_once("://") else {
+        return "invalid-url".to_string();
+    };
+    let (authority, path) = rest
+        .find('/')
+        .map(|index| (&rest[..index], &rest[index..]))
+        .unwrap_or((rest, "/"));
+    let authority = authority.rsplit_once('@').map(|(_, host)| host).unwrap_or(authority);
+    format!("{scheme}://{authority}{path}")
+}
+
 #[cfg(test)]
 mod tests {
-    use super::rewrite_url;
+    use super::{redacted_url, rewrite_sdk_url, rewrite_url};
+
+    #[test]
+    fn sdk_urls_remain_https_when_routed_to_the_public_tls_endpoint() {
+        assert_eq!(
+            rewrite_sdk_url(
+                "https://gamesdk-en.sl916.com/sdk/init?gameid=60001",
+                "reverse1999.yezimoan.xyz",
+                32021,
+            ),
+            Some(
+                "https://reverse1999.yezimoan.xyz:32021/sdk/init?gameid=60001".to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn diagnostic_urls_omit_queries_fragments_and_credentials() {
+        assert_eq!(
+            redacted_url(
+                "https://user:secret@account-en.sl916.com/login/mail?token=private#fragment"
+            ),
+            "https://account-en.sl916.com/login/mail"
+        );
+    }
 
     #[test]
     fn sdk_urls_keep_path_and_use_public_sdk_endpoint() {

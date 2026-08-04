@@ -13,6 +13,7 @@ impl MhyModule for MhyContext<Socket> {
         crate::config::get().map_err(anyhow::Error::msg)?;
         let addr = self.get_export("Ws2_32.dll", "connect")?;
         self.interceptor.attach(addr, on_connect)?;
+        crate::diagnostics::event("socket hook attached");
         println!("[*] Socket hook attached to connect()");
         Ok(())
     }
@@ -55,6 +56,10 @@ unsafe extern "win64" fn on_connect(reg: *mut Registers, _: usize) {
             return;
         };
         println!("Redirecting {key} -> {redir_ip}:{}", config.game.port);
+        crate::diagnostics::event(&format!(
+            "game redirect source={key} target={redir_ip}:{}",
+            config.game.port
+        ));
         sockaddr.sin_addr.S_un.S_addr = u32::from(redir_ip).to_be();
         sockaddr.sin_port = config.game.port.to_be();
     }

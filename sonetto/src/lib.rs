@@ -7,6 +7,7 @@ use windows::Win32::System::SystemServices::DLL_PROCESS_ATTACH;
 use windows::Win32::{Foundation::HINSTANCE, System::LibraryLoader::GetModuleHandleA};
 
 mod config;
+mod diagnostics;
 mod interceptor;
 mod modules;
 mod util;
@@ -15,11 +16,13 @@ use crate::modules::{MhyContext, ModuleManager, Network, Socket};
 
 #[allow(clippy::manual_c_str_literals)]
 unsafe fn thread_func() {
+    diagnostics::event("dll attached; waiting for GameAssembly.dll");
     while GetModuleHandleA(PCSTR(b"GameAssembly.dll\0".as_ptr())).is_err() {
         std::thread::sleep(Duration::from_millis(200));
     }
 
     let base = *util::GAME_ASSEMBLY_BASE;
+    diagnostics::event("GameAssembly.dll ready");
 
     //std::thread::sleep(Duration::from_secs(1));
 
@@ -33,6 +36,7 @@ unsafe fn thread_func() {
 
     module_manager.enable(MhyContext::<Network>::new(base));
     module_manager.enable(MhyContext::<Socket>::new(base));
+    diagnostics::event("all hooks initialized");
     println!("Successfully initialized!");
 }
 
